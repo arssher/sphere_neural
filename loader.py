@@ -1,14 +1,17 @@
 from sklearn.datasets import fetch_mldata
+from utils import shuffle_in_unison
 import numpy as np
 
 # TODO: fix target shape. Right now it is samples_number x 10
 class MNISTLoader(object):
-    def __init__(self, train_percent=0.8, test_percent=0.2):
+    def __init__(self, train_percent=0.8, test_percent=None):
         mnist = fetch_mldata('MNIST original')
         data, target = shuffle_in_unison(mnist.data, mnist.target)
         total_samples_number = mnist.data.shape[0]
         self.train_samples_number = int(total_samples_number * train_percent)
         self.test_samples_number = total_samples_number - self.train_samples_number
+        if test_percent is not None:
+            self.test_samples_number = min(self.test_samples_number, int(total_samples_number * test_percent))
         print "Train data contains %s samples, test data contains %s samples" %\
               (self.train_samples_number, self.test_samples_number)
 
@@ -28,9 +31,3 @@ def vectorize_mnist_target(i):
     e = np.zeros(10)
     e[i] = 1.0
     return e
-
-
-def shuffle_in_unison(a, b):
-    assert len(a) == len(b)
-    p = np.random.permutation(len(a))
-    return a[p], b[p]

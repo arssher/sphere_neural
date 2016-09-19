@@ -1,5 +1,5 @@
 import numpy as np
-
+from utils import shuffle_in_unison
 
 # L is number of layers
 # While working with a (l-1), l pair of layers, let K be the number of neurons in (l-1) layer and J number of neurons
@@ -26,9 +26,10 @@ class Network(object):
         assert(a.shape == (self.sizes[0], ) or a.shape == (self.sizes[0], 1))
         a = a.reshape((self.sizes[0], 1))
         for b, w in zip(self.biases, self.weights):
-            a = sigmoid_hack_vectorizer(np.dot(w, a) + b)
+            a = sigmoid(np.dot(w, a) + b)
         return a
 
+    # evaluate test data and print percent of correct answers
     def evaluate(self, test_data, test_target):
         correct_answers = 0
         for test_x, test_y in zip(test_data, test_target):
@@ -39,9 +40,72 @@ class Network(object):
         print "Evaluation finished: {0} / {1} tests correct".format(correct_answers, len(test_data))
         return correct_answers
 
+    def SGD(self, train_data, train_target, epochs, mini_batch_size, eta):
+        assert(train_data.shape[1] == self.sizes[0])
+        N = len(train_data)
+        for j in xrange(epochs):
+            print "Starting epoch {0}".format(j)
+            # train_data, train_target = shuffle_in_unison(train_data, train_target)
+            for mini_batch_index in xrange(0, N, mini_batch_size):
+                print "Starting minibatch {0}-{1}".format(mini_batch_index, mini_batch_index + mini_batch_size)
+                mini_batch_train_data = train_data[mini_batch_index:mini_batch_index + mini_batch_size]
+                mini_batch_train_target = train_target[mini_batch_index:mini_batch_index + mini_batch_size]
+                self.update_mini_batch(mini_batch_train_data, mini_batch_train_target, eta)
+
+            print "Epoch {0} complete".format(j)
+
+    def update_mini_batch(self, train_data, train_target, eta):
+
+        nabla_b = [np.zeros(b.shape) for b in self.biases]  # accumulates changes in biases
+        nabla_w = [np.zeros(w.shape) for w in self.weights]  # accumulates changes in weights
+        for x, y in zip(train_data, train_target):
+            delta_nabla_b, delta_nabla_w = self.backprop(x, y)
+            nabla_b = [nb + dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
+            nabla_w = [nw + dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
+
+        self.weights = [w - (eta / train_data.shape[0]) * nw for w, nw in zip(self.weights, nabla_w)]
+        self.biases = [b - (eta / train_data.shape[0]) * nb for b, nb in zip(self.biases, nabla_b)]
+
+    # returns tuple (nabla_b, nabla_w), shape correspond to those of self.biases and self.weights
+    def backprop(self, x, y):
+        y = y.reshape((10, 1))
+        nabla_b = [np.zeros(b.shape) for b in self.biases]
+        nabla_w = [np.zeros(w.shape) for w in self.weights]
+
+        # forward
+        activation = x.reshape((self.sizes[0], 1))
+        activations = [activation]  # list to store all the activation vectors, layer by layer
+        zs = []  # list to store z vectors, layer by layer
+        for b, w in zip(self.biases, self.weights):
+            z = np.dot(w, activation) + b
+            zs.append(z)
+            activation = sigmoid(z)
+            activations.append(activation)
+
+        # backward
+        # activaitons[-1] is the final output
+        assert(zs[-1].shape == y.shape) # FIXME: type checking?
+        delta = cost_derivative(activations[-1], y) * sigmoid_prime(zs[-1])
+        nabla_b[-1] = delta
+        nabla_w[-1] = np.dot(delta, activations[-2].transpose())
+
+        for l in xrange(2, self.num_layers):
+            z = zs[-l]
+            sp = sigmoid_prime(z)
+            delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
+            nabla_b[-l] = delta
+            nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+        return nabla_b, nabla_w
+
+# returns a column vector -- derivative of C along all final activations
+def cost_derivative(output_activations, y):
+    return output_activations - y
+
+# def cost()
 
 def sigmoid(z):
     return 1.0/(1.0 + np.exp(-z))
+
 
 def sigmoid_hack(z):
     if z > 0:
@@ -54,6 +118,7 @@ def sigmoid_hack(z):
         return e / (1 + e)
 
 sigmoid_hack_vectorizer = np.vectorize(sigmoid_hack)
+
 
 # Derivative of the sigmoid function
 def sigmoid_prime(z):
