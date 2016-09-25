@@ -4,7 +4,7 @@ import numpy as np
 
 
 if __name__ == "__main__":
-    # loader = MNISTLoader(train_percent=0.1, test_percent=0.1)
+    loader = MNISTLoader(train_percent=0.1, test_percent=0.1)
     # net = Network([784, 10, 10])
     # net.SGD(loader.train_data, loader.train_target_vectorized, 1, 10, 3.0)
     # net.evaluate_mnist(loader.train_target, loader.train_target)

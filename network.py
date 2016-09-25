@@ -11,7 +11,9 @@ class Network(object):
     def __init__(self, sizes):
         self.num_layers = len(sizes)
         self.sizes = sizes
-        # L-1 column vectors containing biases, length of each equals to number of layers:
+        self.N = sizes[0]  # number of features
+        self.K = sizes[-1]  # answer's dimension -- number of neurons in the last layer
+        # L-1 column vectors containing biases, length of each equals to number of neurons:
         # if layer has J neurons, it's bias has Jx1 shape
         # We don't need biases for the first (input) layer, bias[0] is the layer 1's biases.
         self.biases = [np.random.randn(y, 1) for y in sizes[1:]]
@@ -50,39 +52,86 @@ class Network(object):
         print "xor evaluation finished, {0} of {1} answers correct".format(correct_answers, test_data.shape[0])
 
     def SGD(self, train_data, train_target, epochs, mini_batch_size, eta):
-        assert(train_data.shape[1] == self.sizes[0])
-        N = len(train_data)
-        for j in xrange(epochs):
-            print "Starting epoch {0}".format(j)
-            # train_data, train_target = shuffle_in_unison(train_data, train_target)
-            for mini_batch_index in xrange(0, N, mini_batch_size):
+        """Trains the network using stochastic gradient descendant.
+
+        Args:
+            train_data: set of training samples without answers, numpy ndarray of shape (M, N) where M is the number of
+                samples and N is the number of features -- a usual sklearn input format.
+            train_target: set of answers for train_data, numpy ndarray of shape (M, K) where M is the number of samples
+                and K is the number of neurons in the last layer.
+            epochs: number of epochs, i.e. iterations over the full training dataset.
+            mini_batch_size: number of samples in one batch, i.e. after every mini_batch_size samples weights will be
+                updated
+            eta: learning rate
+        """
+        assert(train_data.shape[0] == train_target.shape[0])
+        assert(train_data.shape[1] == self.N)
+        assert(train_target.shape[1] == self.K)
+        for ep_num in xrange(epochs):
+            print "Starting epoch {0}".format(ep_num)
+            train_data, train_target = shuffle_in_unison(train_data, train_target)
+            for mini_batch_index in xrange(0, self.N, mini_batch_size):
                 print "Starting minibatch {0}-{1}".format(mini_batch_index, mini_batch_index + mini_batch_size)
                 mini_batch_train_data = train_data[mini_batch_index:mini_batch_index + mini_batch_size]
                 mini_batch_train_target = train_target[mini_batch_index:mini_batch_index + mini_batch_size]
                 self.update_mini_batch(mini_batch_train_data, mini_batch_train_target, eta)
 
-            print "Epoch {0} complete".format(j)
+            print "Epoch {0} complete".format(ep_num)
 
     def update_mini_batch(self, train_data, train_target, eta):
+        """Calculate weight gradients for each neuron in each layer and update weights using train_data-train_target
+           samples.
 
-        nabla_b = [np.zeros(layer_biases.shape) for layer_biases in self.biases]  # accumulates changes in biases per whole batch
-        nabla_w = [np.zeros(layer_weights.shape) for layer_weights in self.weights]  # accumulates changes in weights per whole batch
-        for x, y in zip(train_data, train_target):
-            delta_nabla_b, delta_nabla_w = self.backprop(x, y)
+        Args:
+            train_data: set of training samples without answers, numpy ndarray of shape (M, N) where M is the number of
+                samples and N is the number of features -- a usual sklearn input format. However, we will immediately
+                transpose them (and train_target too) since it is more convenient for the math.
+            train_target: set of answers for train_data, numpy ndarray of shape (M, K) where M is the number of samples
+                and K is the number of neurons in the last layer.
+            eta: learning rate
+        """
+        assert(train_data.shape[0] == train_target.shape[0])
+        assert (train_data.shape[1] == self.N)
+        assert(train_target.shape[1] == self.K)
+        # TODO: rewrite using matrix math
+        train_data_transposed = np.transpose(train_data)
+        train_target_transposed = np.transpose(train_target)
+        # accumulates changes in biases per whole batch
+        nabla_b = [np.zeros(layer_biases.shape) for layer_biases in self.biases]
+        # accumulates changes in weights per whole batch
+        nabla_w = [np.zeros(layer_weights.shape) for layer_weights in self.weights]
+        for i_sample in xrange(train_data.shape[0]):
+            x_col = train_data_transposed[:, i_sample].reshape((self.N, 1))
+            y_col = train_target_transposed[:, i_sample].reshape((self.K, 1))
+            delta_nabla_b, delta_nabla_w = self.backprop(x_col, y_col)
             nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, delta_nabla_b)
             nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, delta_nabla_w)
 
-        self.weights = [layer_weights - (eta / train_data.shape[0]) * nw for layer_weights, nw in zip(self.weights, nabla_w)]
-        self.biases = [layer_biases - (eta / train_data.shape[0]) * nb for layer_biases, nb in zip(self.biases, nabla_b)]
+        self.weights = [layer_weights - (eta / train_data.shape[0]) * nw
+                        for layer_weights, nw in zip(self.weights, nabla_w)]
+        self.biases = [layer_biases - (eta / train_data.shape[0]) * nb
+                       for layer_biases, nb in zip(self.biases, nabla_b)]
 
     # returns tuple (nabla_b, nabla_w), shape correspond to those of self.biases and self.weights
     def backprop(self, x, y):
-        y = y.reshape((self.sizes[-1], 1))
+        """Calculate weight gradient for each neuron in each layer using single sample x with answer y.
+
+        Args:
+            x: Single sample to train on, numpy ndarray. x has shape (N, 1) where N is the number of features.
+            y: Answer to x. y has shape (K, 1) where K is the number of neurons in the last layer.
+
+        Returns:
+            A tuple (delta_nabla_b, delta_nabla_w) where delta_nabla_b is the list of biases's gradients changes, and
+             delta_nabla_w is the list of weights's gradients changes. Their shape is exactly like self.biases and
+             self.weights -- list of numpy column vectors and list of numpy matrices.
+        """
+        assert(x.shape == (self.N, 1))
+        assert(y.shape == (self.K, 1))
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
 
         # forward
-        activation = x.reshape((self.sizes[0], 1))
+        activation = x
         activations = [activation]  # list to store all the activation vectors, layer by layer
         zs = []  # list to store z vectors, layer by layer
         for b, w in zip(self.biases, self.weights):
@@ -107,13 +156,16 @@ class Network(object):
         cost(activations, y)
         return nabla_b, nabla_w
 
+
 # returns a column vector -- derivative of C along all final activations
 def cost_derivative(output_activations, y):
     return output_activations - y
 
+
 def cost(activations, target):
     pass
     # print target
+
 
 def sigmoid(z):
     return 1.0/(1.0 + np.exp(-z))
