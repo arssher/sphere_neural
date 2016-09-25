@@ -1,10 +1,14 @@
 import numpy as np
 from utils import shuffle_in_unison
 
+# force numpy to throw exception on any math errors
+np.seterr(all='raise')
+
 # L is number of layers
 # While working with a (l-1), l pair of layers, let K be the number of neurons in (l-1) layer and J number of neurons
 # in l layer. weights[l][j, k] contains a weight connecting k'th neuron from layer l-1 to j'th neuron in layer l.
 # We will count layers from 1, so the input layer is number 0 layer.
+
 
 class Network(object):
     # sizes is a list of layer's sizes
@@ -16,11 +20,12 @@ class Network(object):
         # L-1 column vectors containing biases, length of each equals to number of neurons:
         # if layer has J neurons, it's bias has Jx1 shape
         # We don't need biases for the first (input) layer, bias[0] is the layer 1's biases.
-        self.biases = [np.random.randn(y, 1) for y in sizes[1:]]
+        mu, sigma = 0, 0.001
+        self.biases = [np.random.normal(mu, sigma, (y, 1)) for y in sizes[1:]]
         # L-1 weight matrices. Matrix weights[0] connects input layer 0 with layer 1.
         # The matrix weights[l] has size JxK, where
         # K is number of neurons in the layer l (the previous one), and J is number of neurons in the layer l+1.
-        self.weights = [np.random.randn(J, K)
+        self.weights = [np.random.normal(mu, sigma, (J, K))
                         for K, J in zip(sizes[:-1], sizes[1:])]
 
     # network's output for input vector a, a must have shape sizes[0]x1 or (sizes[0], ) -- the latter will be reshaped
@@ -70,8 +75,8 @@ class Network(object):
         for ep_num in xrange(epochs):
             print "Starting epoch {0}".format(ep_num)
             train_data, train_target = shuffle_in_unison(train_data, train_target)
-            for mini_batch_index in xrange(0, self.N, mini_batch_size):
-                print "Starting minibatch {0}-{1}".format(mini_batch_index, mini_batch_index + mini_batch_size)
+            for mini_batch_index in xrange(0, train_data.shape[0], mini_batch_size):
+                # print "Starting minibatch {0}-{1}".format(mini_batch_index, mini_batch_index + mini_batch_size)
                 mini_batch_train_data = train_data[mini_batch_index:mini_batch_index + mini_batch_size]
                 mini_batch_train_target = train_target[mini_batch_index:mini_batch_index + mini_batch_size]
                 self.update_mini_batch(mini_batch_train_data, mini_batch_train_target, eta)

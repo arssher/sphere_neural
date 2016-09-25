@@ -7,7 +7,8 @@ import numpy as np
 class MNISTLoader(object):
     def __init__(self, train_percent=0.8, test_percent=None):
         mnist = fetch_mldata('MNIST original')
-        data, target = shuffle_in_unison(mnist.data, mnist.target)
+        data, target = mnist.data, mnist.target
+        data, target = shuffle_in_unison(data, target)
         total_samples_number = mnist.data.shape[0]
         self.train_samples_number = int(total_samples_number * train_percent)
         self.test_samples_number = total_samples_number - self.train_samples_number
