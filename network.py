@@ -30,15 +30,24 @@ class Network(object):
         return a
 
     # evaluate test data and print percent of correct answers
-    def evaluate(self, test_data, test_target):
+    def evaluate_mnist(self, test_data, test_target):
         correct_answers = 0
         for test_x, test_y in zip(test_data, test_target):
             answer = np.argmax(self.feedforward(test_x))
+            # print "given answer is {0}, right answer is {1}".format(answer, test_y)
             if answer == test_y:
                 correct_answers += 1
-
         print "Evaluation finished: {0} / {1} tests correct".format(correct_answers, len(test_data))
         return correct_answers
+
+    def evaluate_xor(self, test_data, test_target):
+        correct_answers = 0
+        for test_x, test_y in zip(test_data, test_target):
+            network_answer = self.feedforward(test_x)
+            if round(network_answer[0][0]) == test_y[0]:
+                correct_answers += 1
+            print "test is {0}. network answer was {1}, correct answer is {2}".format(test_x, network_answer, test_y)
+        print "xor evaluation finished, {0} of {1} answers correct".format(correct_answers, test_data.shape[0])
 
     def SGD(self, train_data, train_target, epochs, mini_batch_size, eta):
         assert(train_data.shape[1] == self.sizes[0])
@@ -56,19 +65,19 @@ class Network(object):
 
     def update_mini_batch(self, train_data, train_target, eta):
 
-        nabla_b = [np.zeros(b.shape) for b in self.biases]  # accumulates changes in biases
-        nabla_w = [np.zeros(w.shape) for w in self.weights]  # accumulates changes in weights
+        nabla_b = [np.zeros(layer_biases.shape) for layer_biases in self.biases]  # accumulates changes in biases per whole batch
+        nabla_w = [np.zeros(layer_weights.shape) for layer_weights in self.weights]  # accumulates changes in weights per whole batch
         for x, y in zip(train_data, train_target):
             delta_nabla_b, delta_nabla_w = self.backprop(x, y)
-            nabla_b = [nb + dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
-            nabla_w = [nw + dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
+            nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, delta_nabla_b)
+            nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, delta_nabla_w)
 
-        self.weights = [w - (eta / train_data.shape[0]) * nw for w, nw in zip(self.weights, nabla_w)]
-        self.biases = [b - (eta / train_data.shape[0]) * nb for b, nb in zip(self.biases, nabla_b)]
+        self.weights = [layer_weights - (eta / train_data.shape[0]) * nw for layer_weights, nw in zip(self.weights, nabla_w)]
+        self.biases = [layer_biases - (eta / train_data.shape[0]) * nb for layer_biases, nb in zip(self.biases, nabla_b)]
 
     # returns tuple (nabla_b, nabla_w), shape correspond to those of self.biases and self.weights
     def backprop(self, x, y):
-        y = y.reshape((10, 1))
+        y = y.reshape((self.sizes[-1], 1))
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
 
@@ -95,13 +104,16 @@ class Network(object):
             delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
             nabla_b[-l] = delta
             nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+        cost(activations, y)
         return nabla_b, nabla_w
 
 # returns a column vector -- derivative of C along all final activations
 def cost_derivative(output_activations, y):
     return output_activations - y
 
-# def cost()
+def cost(activations, target):
+    pass
+    # print target
 
 def sigmoid(z):
     return 1.0/(1.0 + np.exp(-z))

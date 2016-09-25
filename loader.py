@@ -2,6 +2,7 @@ from sklearn.datasets import fetch_mldata
 from utils import shuffle_in_unison
 import numpy as np
 
+
 # TODO: fix target shape. Right now it is samples_number x 10
 class MNISTLoader(object):
     def __init__(self, train_percent=0.8, test_percent=None):
@@ -17,7 +18,6 @@ class MNISTLoader(object):
 
         self.train_data = data[:self.train_samples_number]
         self.train_target = target[:self.train_samples_number]
-
         self.train_target_vectorized = np.empty((self.train_samples_number, 10))
         for i in xrange(self.train_samples_number):
             self.train_target_vectorized[i] = vectorize_mnist_target(self.train_target[i])
