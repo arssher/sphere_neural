@@ -17,16 +17,21 @@ class Network(object):
         self.sizes = sizes
         self.N = sizes[0]  # number of features
         self.K = sizes[-1]  # answer's dimension -- number of neurons in the last layer
+        self.biases = None
+        self.weights = None
+        self.init_weights_and_biases()
+
+    def init_weights_and_biases(self):
         # L-1 column vectors containing biases, length of each equals to number of neurons:
         # if layer has J neurons, it's bias has Jx1 shape
         # We don't need biases for the first (input) layer, bias[0] is the layer 1's biases.
-        mu, sigma = 0, 0.001
-        self.biases = [np.random.normal(mu, sigma, (y, 1)) for y in sizes[1:]]
+        mu, sigma = 0, 1.0
+        self.biases = [np.random.normal(mu, sigma, (y, 1)) for y in self.sizes[1:]]
         # L-1 weight matrices. Matrix weights[0] connects input layer 0 with layer 1.
         # The matrix weights[l] has size JxK, where
         # K is number of neurons in the layer l (the previous one), and J is number of neurons in the layer l+1.
         self.weights = [np.random.normal(mu, sigma, (J, K))
-                        for K, J in zip(sizes[:-1], sizes[1:])]
+                        for K, J in zip(self.sizes[:-1], self.sizes[1:])]
 
     # network's output for input vector a, a must have shape sizes[0]x1 or (sizes[0], ) -- the latter will be reshaped
     def feedforward(self, a):
@@ -72,6 +77,8 @@ class Network(object):
         assert(train_data.shape[0] == train_target.shape[0])
         assert(train_data.shape[1] == self.N)
         assert(train_target.shape[1] == self.K)
+        self.init_weights_and_biases()
+        print "learning on {0} samples with {1} features".format(train_data.shape[0], self.N)
         for ep_num in xrange(epochs):
             print "Starting epoch {0}".format(ep_num)
             train_data, train_target = shuffle_in_unison(train_data, train_target)
