@@ -14,6 +14,7 @@ class Network(object):
     # sizes is a list of layer's sizes
     def __init__(self, sizes):
         self.num_layers = len(sizes)
+        assert(self.num_layers >= 2)
         self.sizes = sizes
         self.N = sizes[0]  # number of features
         self.K = sizes[-1]  # answer's dimension -- number of neurons in the last layer
@@ -33,19 +34,49 @@ class Network(object):
         self.weights = [np.random.normal(mu, sigma, (J, K))
                         for K, J in zip(self.sizes[:-1], self.sizes[1:])]
 
-    # network's output for input vector a, a must have shape sizes[0]x1 or (sizes[0], ) -- the latter will be reshaped
-    def feedforward(self, a):
-        assert(a.shape == (self.sizes[0], ) or a.shape == (self.sizes[0], 1))
-        a = a.reshape((self.sizes[0], 1))
+    def feedforward(self, x):
+        """Run sample a through the trained network and return final activations.
+
+           Args:
+               x: sample to run. Numpy ndarray of shape (self.N, 1) or (self.N, ). The latter will be reshaped.
+
+            Returns:
+                Tuple (ouput, activations, zs), where:
+                  output is the final activation, i.e. output of the network. Numpy ndarray of shape (self.K, 1).
+                  activations is a (python) list of activations for each layer. Each element is ndarray with
+                   shape (J, 1) where J is the number of neurons in the corresponding layer.
+                  zs is a (python) list of z for each layer. Each element is ndarray with
+                   shape (J, 1) where J is the number of neurons in the corresponding layer. z of a neuron is a weighted
+                   sum of the neuron's inputs: activation_func(z) === activation.
+        """
+        assert(x.shape == (self.sizes[0],) or x.shape == (self.sizes[0], 1))
+        x = x.reshape((self.sizes[0], 1))
+        activation = x
+        activations = [activation] # list to store all the activation vectors, layer by layer
+        zs = [] # list to store z vectors, layer by layer
         for b, w in zip(self.biases, self.weights):
-            a = sigmoid(np.dot(w, a) + b)
-        return a
+            z = np.dot(w, activation) + b
+            zs.append(z)
+            activation = sigmoid(z)
+            activations.append(activation)
+
+        return activations[-1], activations, zs
+
+        # # forward
+        # activation = x
+        # activations = [activation]  # list to store all the activation vectors, layer by layer
+        # zs = []  # list to store z vectors, layer by layer
+        # for b, w in zip(self.biases, self.weights):
+        #     z = np.dot(w, activation) + b
+        #     zs.append(z)
+        #     activation = sigmoid(z)
+        #     activations.append(activation)
 
     # evaluate test data and print percent of correct answers
     def evaluate_mnist(self, test_data, test_target):
         correct_answers = 0
         for test_x, test_y in zip(test_data, test_target):
-            answer = np.argmax(self.feedforward(test_x))
+            answer = np.argmax(self.feedforward(test_x)[0])
             # print "given answer is {0}, right answer is {1}".format(answer, test_y)
             if answer == test_y:
                 correct_answers += 1
@@ -55,7 +86,7 @@ class Network(object):
     def evaluate_xor(self, test_data, test_target):
         correct_answers = 0
         for test_x, test_y in zip(test_data, test_target):
-            network_answer = self.feedforward(test_x)
+            network_answer = self.feedforward(test_x)[0]
             if round(network_answer[0][0]) == test_y[0]:
                 correct_answers += 1
             print "test is {0}. network answer was {1}, correct answer is {2}".format(test_x, network_answer, test_y)
@@ -103,7 +134,7 @@ class Network(object):
             eta: learning rate
         """
         assert(train_data.shape[0] == train_target.shape[0])
-        assert (train_data.shape[1] == self.N)
+        assert(train_data.shape[1] == self.N)
         assert(train_target.shape[1] == self.K)
         # TODO: rewrite using matrix math
         train_data_transposed = np.transpose(train_data)
@@ -115,9 +146,13 @@ class Network(object):
         for i_sample in xrange(train_data.shape[0]):
             x_col = train_data_transposed[:, i_sample].reshape((self.N, 1))
             y_col = train_target_transposed[:, i_sample].reshape((self.K, 1))
-            delta_nabla_b, delta_nabla_w = self.backprop(x_col, y_col)
-            nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, delta_nabla_b)
-            nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, delta_nabla_w)
+            nabla_b_for_i_sample, nabla_w_for_i_sample = self.backprop_single_sample(x_col, y_col)
+            nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, nabla_b_for_i_sample)
+            nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, nabla_w_for_i_sample)
+            if False:
+                for i in xrange(len(nabla_w)):
+                    print "weights grads from layer {0} to layer {1}:".format(i, i+1)
+                    print nabla_w_for_i_sample[i]
 
         self.weights = [layer_weights - (eta / train_data.shape[0]) * nw
                         for layer_weights, nw in zip(self.weights, nabla_w)]
@@ -125,7 +160,7 @@ class Network(object):
                        for layer_biases, nb in zip(self.biases, nabla_b)]
 
     # returns tuple (nabla_b, nabla_w), shape correspond to those of self.biases and self.weights
-    def backprop(self, x, y):
+    def backprop_single_sample(self, x, y):
         """Calculate weight gradient for each neuron in each layer using single sample x with answer y.
 
         Args:
@@ -143,19 +178,12 @@ class Network(object):
         nabla_w = [np.zeros(w.shape) for w in self.weights]
 
         # forward
-        activation = x
-        activations = [activation]  # list to store all the activation vectors, layer by layer
-        zs = []  # list to store z vectors, layer by layer
-        for b, w in zip(self.biases, self.weights):
-            z = np.dot(w, activation) + b
-            zs.append(z)
-            activation = sigmoid(z)
-            activations.append(activation)
+        output, activations, zs = self.feedforward(x)
 
         # backward
         # activaitons[-1] is the final output
-        assert(zs[-1].shape == y.shape) # FIXME: type checking?
-        delta = cost_derivative(activations[-1], y) * sigmoid_prime(zs[-1])
+        assert(zs[-1].shape == y.shape)
+        delta = cost_derivative(output, y) * sigmoid_prime(zs[-1])
         nabla_b[-1] = delta
         nabla_w[-1] = np.dot(delta, activations[-2].transpose())
 
