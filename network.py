@@ -12,7 +12,8 @@ np.seterr(all='raise')
 
 class Network(object):
     # sizes is a list of layer's sizes
-    def __init__(self, sizes):
+    def __init__(self, sizes, activation, gch, gchl=None, gchj=None, gchk=None):
+        assert sizes is not None
         self.num_layers = len(sizes)
         assert(self.num_layers >= 2)
         self.sizes = sizes
@@ -22,12 +23,19 @@ class Network(object):
         self.weights = None
         self.init_weights_and_biases()
 
-        # self.activation_func = sigmoid
-        # self.activation_func_derivative = sigmoid_derivative
-        # self.activation_func = relu
-        # self.activation_func_derivative = relu_derivative
-        self.activation_func = identity_activation
-        self.activation_func_derivative = identity_activation_derivative
+        self.activation_func = sigmoid
+        self.activation_func_derivative = sigmoid_derivative
+        if activation == "relu":
+            self.activation_func = relu
+            self.activation_func_derivative = relu_derivative
+        elif activation == "identity":
+            self.activation_func = identity_activation
+            self.activation_func_derivative = identity_activation_derivative
+
+        self.gch = gch
+        self.gchl = gchl
+        self.gchj = gchj
+        self.gchk = gchk
 
     def init_weights_and_biases(self):
         # L-1 column vectors containing biases, length of each equals to number of neurons:
@@ -192,8 +200,6 @@ class Network(object):
             nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
 
         if True:
-                # print "debugging gradients: this is a backprop-computed derivative of C along weight[0][2, 1], i.e. " \
-                # "weight of connection from neuron 1 of layer 0 to neuron 2 of layer 1, and manually computed one"
                 print nabla_w[0][2, 1], self.calc_grad_manually(x, y)
 
         return nabla_b, nabla_w
