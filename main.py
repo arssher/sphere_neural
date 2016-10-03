@@ -7,7 +7,7 @@ def evaluate_mnist():
     loader = MNISTLoader()
     net = Network([784, 30, 10])
 
-    net.SGD(loader.train_data, loader.train_target_vectorized, epochs=1, mini_batch_size=10, eta=3.0)
+    net.SGD(loader.train_data, loader.train_target_vectorized, epochs=1, mini_batch_size=10, eta=1.0)
     net.evaluate_mnist(loader.test_data, loader.test_target)
 
 
@@ -26,8 +26,9 @@ def evaluate_xor():
     ])
 
     net = Network([2, 4, 1])
-    net.SGD(xor_train_data, xor_train_target, 1000, 1, 0.5)
+    net.SGD(xor_train_data, xor_train_target, epochs=1000, mini_batch_size=1, eta=0.5)
     net.evaluate_xor(xor_train_data, xor_train_target)
 
 if __name__ == "__main__":
-    evaluate_mnist()
+    evaluate_xor()
+    # evaluate_mnist()

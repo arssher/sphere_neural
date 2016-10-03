@@ -7,7 +7,7 @@ np.seterr(all='raise')
 # L is number of layers
 # While working with a (l-1), l pair of layers, let K be the number of neurons in (l-1) layer and J number of neurons
 # in l layer. weights[l][j, k] contains a weight connecting k'th neuron from layer l-1 to j'th neuron in layer l.
-# We will count layers from 1, so the input layer is number 0 layer.
+# We will count layers from 0, so the input layer is number 0 layer.
 
 
 class Network(object):
@@ -22,6 +22,13 @@ class Network(object):
         self.weights = None
         self.init_weights_and_biases()
 
+        # self.activation_func = sigmoid
+        # self.activation_func_derivative = sigmoid_derivative
+        # self.activation_func = relu
+        # self.activation_func_derivative = relu_derivative
+        self.activation_func = identity_activation
+        self.activation_func_derivative = identity_activation_derivative
+
     def init_weights_and_biases(self):
         # L-1 column vectors containing biases, length of each equals to number of neurons:
         # if layer has J neurons, it's bias has Jx1 shape
@@ -34,11 +41,13 @@ class Network(object):
         self.weights = [np.random.normal(mu, sigma, (J, K))
                         for K, J in zip(self.sizes[:-1], self.sizes[1:])]
 
-    def feedforward(self, x):
-        """Run sample a through the trained network and return final activations.
+    def feedforward(self, x, weights=None):
+        """Run sample a through the trained network and return output, activations and weights sums.
 
            Args:
                x: sample to run. Numpy ndarray of shape (self.N, 1) or (self.N, ). The latter will be reshaped.
+               weights: you can specify custom weights here, they will be used instead of self.weights. Useful for
+               debugging.
 
             Returns:
                 Tuple (ouput, activations, zs), where:
@@ -51,26 +60,20 @@ class Network(object):
         """
         assert(x.shape == (self.sizes[0],) or x.shape == (self.sizes[0], 1))
         x = x.reshape((self.sizes[0], 1))
+
+        if weights is None:
+            weights = self.weights
+
         activation = x
         activations = [activation] # list to store all the activation vectors, layer by layer
         zs = [] # list to store z vectors, layer by layer
-        for b, w in zip(self.biases, self.weights):
+        for b, w in zip(self.biases, weights):
             z = np.dot(w, activation) + b
             zs.append(z)
-            activation = sigmoid(z)
+            activation = self.activation_func(z)
             activations.append(activation)
 
         return activations[-1], activations, zs
-
-        # # forward
-        # activation = x
-        # activations = [activation]  # list to store all the activation vectors, layer by layer
-        # zs = []  # list to store z vectors, layer by layer
-        # for b, w in zip(self.biases, self.weights):
-        #     z = np.dot(w, activation) + b
-        #     zs.append(z)
-        #     activation = sigmoid(z)
-        #     activations.append(activation)
 
     # evaluate test data and print percent of correct answers
     def evaluate_mnist(self, test_data, test_target):
@@ -149,19 +152,14 @@ class Network(object):
             nabla_b_for_i_sample, nabla_w_for_i_sample = self.backprop_single_sample(x_col, y_col)
             nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, nabla_b_for_i_sample)
             nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, nabla_w_for_i_sample)
-            if False:
-                for i in xrange(len(nabla_w)):
-                    print "weights grads from layer {0} to layer {1}:".format(i, i+1)
-                    print nabla_w_for_i_sample[i]
 
         self.weights = [layer_weights - (eta / train_data.shape[0]) * nw
                         for layer_weights, nw in zip(self.weights, nabla_w)]
         self.biases = [layer_biases - (eta / train_data.shape[0]) * nb
                        for layer_biases, nb in zip(self.biases, nabla_b)]
 
-    # returns tuple (nabla_b, nabla_w), shape correspond to those of self.biases and self.weights
     def backprop_single_sample(self, x, y):
-        """Calculate weight gradient for each neuron in each layer using single sample x with answer y.
+        """Calculate weight derivative for each neuron in each layer using single sample x with answer y.
 
         Args:
             x: Single sample to train on, numpy ndarray. x has shape (N, 1) where N is the number of features.
@@ -181,20 +179,40 @@ class Network(object):
         output, activations, zs = self.feedforward(x)
 
         # backward
-        # activaitons[-1] is the final output
         assert(zs[-1].shape == y.shape)
-        delta = cost_derivative(output, y) * sigmoid_prime(zs[-1])
+        delta = cost_derivative(output, y) * self.activation_func_derivative(zs[-1])
         nabla_b[-1] = delta
         nabla_w[-1] = np.dot(delta, activations[-2].transpose())
 
         for l in xrange(2, self.num_layers):
             z = zs[-l]
-            sp = sigmoid_prime(z)
+            sp = self.activation_func_derivative(z)
             delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
             nabla_b[-l] = delta
             nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
-        cost(activations, y)
+
+        if True:
+                # print "debugging gradients: this is a backprop-computed derivative of C along weight[0][2, 1], i.e. " \
+                # "weight of connection from neuron 1 of layer 0 to neuron 2 of layer 1, and manually computed one"
+                print nabla_w[0][2, 1], self.calc_grad_manually(x, y)
+
         return nabla_b, nabla_w
+
+    def calc_grad_manually(self, x, y):
+        from copy import deepcopy
+        weights = deepcopy(self.weights)
+        eps = 0.0001
+        weights[0][2, 1] += eps
+        C_right = self.cost_per_sample(x, y, weights)
+        weights[0][2, 1] -= 2*eps
+        C_left = self.cost_per_sample(x, y, weights)
+        return (C_right - C_left) / (2*eps)
+
+    def cost_per_sample(self, x, y, weights):
+        output = self.feedforward(x, weights=weights)[0]
+        diff = y - output
+        return np.dot(np.transpose(diff), diff)[0][0]
+
 
 
 # returns a column vector -- derivative of C along all final activations
@@ -202,13 +220,28 @@ def cost_derivative(output_activations, y):
     return output_activations - y
 
 
-def cost(activations, target):
-    pass
-    # print target
+def identity_activation(z):
+    return z
+
+
+def identity_activation_derivative(z):
+    return np.ones(z.shape)
+
+
+def relu(z):
+    return np.maximum(z, 0)
+
+
+def relu_derivative(z):
+    return np.maximum(np.sign(z), 0)
 
 
 def sigmoid(z):
     return 1.0/(1.0 + np.exp(-z))
+
+
+def sigmoid_derivative(z):
+    return sigmoid(z)*(1-sigmoid(z))
 
 
 def sigmoid_hack(z):
@@ -222,8 +255,3 @@ def sigmoid_hack(z):
         return e / (1 + e)
 
 sigmoid_hack_vectorizer = np.vectorize(sigmoid_hack)
-
-
-# Derivative of the sigmoid function
-def sigmoid_prime(z):
-    return sigmoid(z)*(1-sigmoid(z))
