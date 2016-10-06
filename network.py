@@ -12,7 +12,7 @@ np.seterr(all='raise')
 
 class Network(object):
     # sizes is a list of layer's sizes
-    def __init__(self, sizes, activation, gch, gchl=None, gchj=None, gchk=None):
+    def __init__(self, sizes, activation, cost, gradient_check):
         assert sizes is not None
         self.num_layers = len(sizes)
         assert(self.num_layers >= 2)
@@ -31,11 +31,12 @@ class Network(object):
         elif activation == "identity":
             self.activation_func = identity_activation
             self.activation_func_derivative = identity_activation_derivative
+        self.cost_func = msi
+        self.cost_derivative = msi_derivative
+        if cost == "crossentropy":
+            pass
 
-        self.gch = gch
-        self.gchl = gchl
-        self.gchj = gchj
-        self.gchk = gchk
+        self.gradient_check = gradient_check
 
     def init_weights_and_biases(self):
         # L-1 column vectors containing biases, length of each equals to number of neurons:
@@ -49,13 +50,15 @@ class Network(object):
         self.weights = [np.random.normal(mu, sigma, (J, K))
                         for K, J in zip(self.sizes[:-1], self.sizes[1:])]
 
-    def feedforward(self, x, weights=None):
-        """Run sample a through the trained network and return output, activations and weights sums.
+    def feedforward(self, x, weights=None, biases=None):
+        """Run sample a through the trained network and return output, activations and weighted sums.
 
            Args:
                x: sample to run. Numpy ndarray of shape (self.N, 1) or (self.N, ). The latter will be reshaped.
                weights: you can specify custom weights here, they will be used instead of self.weights. Useful for
-               debugging.
+                 debugging (gradient-checking, you know).
+               biases: you can specify custom biases here, they will be used instead of self.biases. Useful for
+                 debugging (gradient-checking, you know).
 
             Returns:
                 Tuple (ouput, activations, zs), where:
@@ -66,16 +69,18 @@ class Network(object):
                    shape (J, 1) where J is the number of neurons in the corresponding layer. z of a neuron is a weighted
                    sum of the neuron's inputs: activation_func(z) === activation.
         """
-        assert(x.shape == (self.sizes[0],) or x.shape == (self.sizes[0], 1))
-        x = x.reshape((self.sizes[0], 1))
+        assert (x.shape == (self.N,) or x.shape == (self.N, 1))
+        x = x.reshape((self.N, 1))
 
         if weights is None:
             weights = self.weights
+        if biases is None:
+            biases = self.biases
 
         activation = x
-        activations = [activation] # list to store all the activation vectors, layer by layer
-        zs = [] # list to store z vectors, layer by layer
-        for b, w in zip(self.biases, weights):
+        activations = [activation]  # list to store all the activation vectors, layer by layer
+        zs = []  # list to store z vectors, layer by layer
+        for b, w in zip(biases, weights):
             z = np.dot(w, activation) + b
             zs.append(z)
             activation = self.activation_func(z)
@@ -143,6 +148,11 @@ class Network(object):
             train_target: set of answers for train_data, numpy ndarray of shape (M, K) where M is the number of samples
                 and K is the number of neurons in the last layer.
             eta: learning rate
+
+        Returns:
+            Tuple (nabla_w, nabla_b) with accumulated changes in weights in biases, shape like self.weights and
+              self.biases exactly. It is useful only for debugging, the main action happens here as a side effect --
+              function changes self.weights & self.biases itself.
         """
         assert(train_data.shape[0] == train_target.shape[0])
         assert(train_data.shape[1] == self.N)
@@ -165,6 +175,7 @@ class Network(object):
                         for layer_weights, nw in zip(self.weights, nabla_w)]
         self.biases = [layer_biases - (eta / train_data.shape[0]) * nb
                        for layer_biases, nb in zip(self.biases, nabla_b)]
+        return nabla_w, nabla_b
 
     def backprop_single_sample(self, x, y):
         """Calculate weight derivative for each neuron in each layer using single sample x with answer y.
@@ -188,7 +199,7 @@ class Network(object):
 
         # backward
         assert(zs[-1].shape == y.shape)
-        delta = cost_derivative(output, y) * self.activation_func_derivative(zs[-1])
+        delta = msi_derivative(output, y) * self.activation_func_derivative(zs[-1])
         nabla_b[-1] = delta
         nabla_w[-1] = np.dot(delta, activations[-2].transpose())
 
@@ -199,7 +210,7 @@ class Network(object):
             nabla_b[-l] = delta
             nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
 
-        if True:
+        if self.gradient_check:
                 print nabla_w[0][2, 1], self.calc_grad_manually(x, y)
 
         return nabla_b, nabla_w
@@ -207,10 +218,10 @@ class Network(object):
     def calc_grad_manually(self, x, y):
         from copy import deepcopy
         weights = deepcopy(self.weights)
-        eps = 0.0001
+        eps = 0.00001
         weights[0][2, 1] += eps
         C_right = self.cost_per_sample(x, y, weights)
-        weights[0][2, 1] -= 2*eps
+        weights[0][2, 1] -= 1*eps
         C_left = self.cost_per_sample(x, y, weights)
         return (C_right - C_left) / (2*eps)
 
@@ -220,9 +231,22 @@ class Network(object):
         return np.dot(np.transpose(diff), diff)[0][0]
 
 
+def msi(y, output_activations):
+    """Calculate MSI.
+
+    Args:
+        y: correct answers. ndarray of shape (M, K) where M is the number of samples
+            and K is the number of neurons in the last layer.
+        output_activations: network's answers. ndarray of shape (M, K) where M is the number of samples
+            and K is the number of neurons in the last layer.
+
+    Returns:
+
+    """
+    pass
 
 # returns a column vector -- derivative of C along all final activations
-def cost_derivative(output_activations, y):
+def msi_derivative(output_activations, y):
     return output_activations - y
 
 
