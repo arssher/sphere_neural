@@ -138,7 +138,7 @@ class Network(object):
             print "Epoch {0} complete".format(ep_num)
 
     def update_mini_batch(self, train_data, train_target, eta):
-        """Calculate weight gradients for each neuron in each layer and update weights using train_data-train_target
+        """Calculate weight derivatives for each neuron in each layer and update weights using train_data-train_target
            samples.
 
         Args:
@@ -150,7 +150,7 @@ class Network(object):
             eta: learning rate
 
         Returns:
-            Tuple (nabla_w, nabla_b) with accumulated changes in weights in biases, shape like self.weights and
+            Tuple (nabla_w, nabla_b) with accumulated weights and biases changes, shape like self.weights and
               self.biases exactly. It is useful only for debugging, the main action happens here as a side effect --
               function changes self.weights & self.biases itself.
         """
@@ -199,7 +199,7 @@ class Network(object):
 
         # backward
         assert(zs[-1].shape == y.shape)
-        delta = msi_derivative(output, y) * self.activation_func_derivative(zs[-1])
+        delta = self.cost_derivative(output, y) * self.activation_func_derivative(zs[-1])
         nabla_b[-1] = delta
         nabla_w[-1] = np.dot(delta, activations[-2].transpose())
 
