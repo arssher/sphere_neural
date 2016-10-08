@@ -4,10 +4,12 @@ from utils import shuffle_in_unison
 # force numpy to throw exception on any math errors
 np.seterr(all='raise')
 
+# Some used names:
 # L is number of layers
 # While working with a (l-1), l pair of layers, let K be the number of neurons in (l-1) layer and J number of neurons
 # in l layer. weights[l][j, k] contains a weight connecting k'th neuron from layer l-1 to j'th neuron in layer l.
 # We will count layers from 0, so the input layer is number 0 layer.
+# z of a neuron is a weighted sum of the neuron's inputs: activation_func(z) === activation
 
 
 class Network(object):
@@ -50,34 +52,37 @@ class Network(object):
         self.weights = [np.random.normal(mu, sigma, (J, K))
                         for K, J in zip(self.sizes[:-1], self.sizes[1:])]
 
-    def feedforward(self, x, weights=None, biases=None):
-        """Run sample a through the trained network and return output, activations and weighted sums.
+    def feedforward(self, X, weights=None, biases=None):
+        """Run samples X through the trained network and return outputs, activations and weighted sums for each sample
 
            Args:
-               x: sample to run. Numpy ndarray of shape (self.N, 1) or (self.N, ). The latter will be reshaped.
+               X: samples to run. Numpy ndarray of shape (self.N, M) or (self.N, ), where M is number of samples.
+                The latter (one sample) will be reshaped.
                weights: you can specify custom weights here, they will be used instead of self.weights. Useful for
                  debugging (gradient-checking, you know).
                biases: you can specify custom biases here, they will be used instead of self.biases. Useful for
                  debugging (gradient-checking, you know).
 
             Returns:
-                Tuple (ouput, activations, zs), where:
-                  output is the final activation, i.e. output of the network. Numpy ndarray of shape (self.K, 1).
-                  activations is a (python) list of activations for each layer. Each element is ndarray with
-                   shape (J, 1) where J is the number of neurons in the corresponding layer.
-                  zs is a (python) list of z for each layer. Each element is ndarray with
-                   shape (J, 1) where J is the number of neurons in the corresponding layer. z of a neuron is a weighted
-                   sum of the neuron's inputs: activation_func(z) === activation.
+                Tuple (ouputs, activations, zs), where:
+                  output is the final activation, i.e. output of the network, for each sample.
+                   Numpy ndarray of shape (self.K, M).
+                  activations is a (python) list of activations for each layer for each sample (that's why double s).
+                   Each element is ndarray with shape (J, M) where J is the number of neurons in the corresponding
+                    layer.
+                  zs is a (python) list of z for each layer for each sample. Each element is ndarray of
+                   shape (J, M) where J is the number of neurons in the corresponding layer.
         """
-        assert (x.shape == (self.N,) or x.shape == (self.N, 1))
-        x = x.reshape((self.N, 1))
+        if X.shape == (self.N,):
+            X = X.reshape((self.N, 1))
+        assert (X.shape[0] == self.N)
 
         if weights is None:
             weights = self.weights
         if biases is None:
             biases = self.biases
 
-        activation = x
+        activation = X
         activations = [activation]  # list to store all the activation vectors, layer by layer
         zs = []  # list to store z vectors, layer by layer
         for b, w in zip(biases, weights):
@@ -138,8 +143,9 @@ class Network(object):
             print "Epoch {0} complete".format(ep_num)
 
     def update_mini_batch(self, train_data, train_target, eta):
-        """Calculate weight derivatives for each neuron in each layer and update weights using train_data-train_target
-           samples.
+        """Calculate weight and bias derivatives for each neuron in each layer and update self.weights & self.biases
+           using train_data-train_target samples. It means that for each sample in train_data we calculate the
+           derivatives, sum them up and update self.weights and self.biases using that summed value.
 
         Args:
             train_data: set of training samples without answers, numpy ndarray of shape (M, N) where M is the number of
@@ -178,42 +184,44 @@ class Network(object):
         return nabla_w, nabla_b
 
     def backprop_single_sample(self, x, y):
-        """Calculate weight derivative for each neuron in each layer using single sample x with answer y.
+        """Calculate weight and bias derivatives for each neuron in each layer using single sample x with answer y via
+           backpropagation.
 
         Args:
             x: Single sample to train on, numpy ndarray. x has shape (N, 1) where N is the number of features.
             y: Answer to x. y has shape (K, 1) where K is the number of neurons in the last layer.
 
         Returns:
-            A tuple (delta_nabla_b, delta_nabla_w) where delta_nabla_b is the list of biases's gradients changes, and
-             delta_nabla_w is the list of weights's gradients changes. Their shape is exactly like self.biases and
-             self.weights -- list of numpy column vectors and list of numpy matrices.
+            A tuple (dLdB, dLdW) where dlDb contains derivatives of L (loss or cost function) along each bias and
+            dLdW contains derivatives of L along each weight. Their shape is exactly the same as self.biases and
+            self.weights -- list of numpy column vectors and list of numpy matrices.
         """
         assert(x.shape == (self.N, 1))
         assert(y.shape == (self.K, 1))
-        nabla_b = [np.zeros(b.shape) for b in self.biases]
-        nabla_w = [np.zeros(w.shape) for w in self.weights]
+        dLdB = [np.zeros(b.shape) for b in self.biases]
+        dLdW = [np.zeros(w.shape) for w in self.weights]
 
         # forward
         output, activations, zs = self.feedforward(x)
 
         # backward
         assert(zs[-1].shape == y.shape)
+        # delta is the derivative of L along z, where z is weight
         delta = self.cost_derivative(output, y) * self.activation_func_derivative(zs[-1])
-        nabla_b[-1] = delta
-        nabla_w[-1] = np.dot(delta, activations[-2].transpose())
+        dLdB[-1] = delta
+        dLdW[-1] = np.dot(delta, activations[-2].transpose())
 
         for l in xrange(2, self.num_layers):
             z = zs[-l]
             sp = self.activation_func_derivative(z)
             delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
-            nabla_b[-l] = delta
-            nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
+            dLdB[-l] = delta
+            dLdW[-l] = np.dot(delta, activations[-l-1].transpose())
 
         if self.gradient_check:
-                print nabla_w[0][2, 1], self.calc_grad_manually(x, y)
+                print dLdW[0][2, 1], self.calc_grad_manually(x, y)
 
-        return nabla_b, nabla_w
+        return dLdB, dLdW
 
     def calc_grad_manually(self, x, y):
         from copy import deepcopy

@@ -55,3 +55,4 @@ if __name__ == "__main__":
 # mod grad / iteration number
 # different learning rate?
 # debug relu?
+# move task evaluation outside?
