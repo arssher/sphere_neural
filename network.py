@@ -316,9 +316,10 @@ class Network(object):
         #         if measure >= max_measure:
         #             max_measure = measure
         # print "grad check for layer {0}: max measure is {1}".format(layer_i, max_measure)
-        print "grad_check, layer {0} <backprop | manual>: {1} | {2}".format(layer_i,
-                                                                            layer_dLdW_by_backprop[0, 0],
-                                                                            self.calc_dLdW_manually(X, Y, layer_i, 0, 0))
+        if layer_i == 0:
+            print "grad_check, layer {0} <backprop | manual>: {1} | {2}".format(layer_i,
+                                                                            layer_dLdW_by_backprop[2, 1],
+                                                                            self.calc_dLdW_manually(X, Y, layer_i, 1, 2))
 
     def calc_dLdW_manually(self, X, Y, l, k, j):
         """This function is similar to self.backprop in the sense that it calculates derivatives of L along weights.
@@ -340,13 +341,12 @@ class Network(object):
         """
         saved_weight = self.weights[l][j, k]  # we will corrupt it while adding-subtracting eps
 
-        eps = 0.000001
+        eps = 0.0001
         self.weights[l][j, k] += eps
         C_right = self.cost(X, Y)
-        self.weights[l][j, k] -= 2*eps
+        self.weights[l][j, k] -= 1*eps
         C_left = self.cost(X, Y)
 
-        self.weights[l][j, k] += eps
         self.weights[l][j, k] = saved_weight  # restore corrupted weights
 
         return (C_right - C_left) / (2*eps)
@@ -373,12 +373,16 @@ def msi(y, output_activations):
     """
     assert (y.shape == output_activations.shape)
     # calculate msi for each sample, msi_per_sample shape is (M,)
-    msi_per_sample = np.linalg.norm(y - output_activations, axis=0)
+    msi_per_sample = np.square(np.linalg.norm(y - output_activations, axis=0))
     # now sum them up and divide on /2M
     res = np.sum(msi_per_sample) / (1 * y.shape[1])
     print "msi per sample is {0}".format(msi_per_sample)
     print "res is {0}".format(res)
     return res
+
+    # diff = y - output_activations
+    # return np.dot(np.transpose(diff), diff)[0][0]
+
 
 # returns a column vector -- derivative of C along all final activations
 def msi_derivative(output_activations, y):
