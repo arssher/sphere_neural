@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
 # TODO list:
 # matrix math?
-# aggregated grad check
+# aggregated grad check, eps as a param
 # add cross entropy
 # add regularization
 # compare comparison? how? findings?
