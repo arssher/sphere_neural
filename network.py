@@ -142,16 +142,6 @@ class Network(object):
                 mini_batch_train_target = train_target[mini_batch_index:mini_batch_index + mini_batch_size]
                 dLdW, dLdB = self.update_mini_batch_one_by_one(mini_batch_train_data, mini_batch_train_target, eta)
 
-                # WARNING: For performance reasons, I decided not to make copies of self.weights while calculating
-                # derivatives manually, I modify them in place and the restore old value.
-                # Therefore, in case of mistakes in gradient checking this may lead to very nasty bugs.
-                # Be careful and disable it if something goes wrong.
-                if self.gradient_check:
-                    for layer_i in xrange(len(self.sizes) - 1):
-                        self.grad_check_per_layer_per_minibatch(np.transpose(mini_batch_train_data),
-                                                                np.transpose(mini_batch_train_target),
-                                                                layer_i, dLdW[layer_i])
-
             print "Epoch {0} complete".format(ep_num)
 
     def update_mini_batch_one_by_one(self, train_data, train_target, eta):
@@ -188,6 +178,16 @@ class Network(object):
             nabla_b_for_i_sample, nabla_w_for_i_sample = self.backprop(x_col, y_col)
             nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, nabla_b_for_i_sample)
             nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, nabla_w_for_i_sample)
+
+        # WARNING: For performance reasons, I decided not to make copies of self.weights while calculating
+        # derivatives manually, I modify them in place and the restore old value.
+        # Therefore, in case of mistakes in gradient checking this may lead to very nasty bugs.
+        # Be careful and disable it if something goes wrong.
+        if self.gradient_check:
+            for layer_i in xrange(len(self.sizes) - 1):
+                self.grad_check_per_layer_per_minibatch(train_data_transposed,
+                                                        train_target_transposed,
+                                                        layer_i, nabla_w[layer_i])
 
         self.weights = [layer_weights - (eta / train_data.shape[0]) * nw
                         for layer_weights, nw in zip(self.weights, nabla_w)]
@@ -340,7 +340,7 @@ class Network(object):
         """
         saved_weight = self.weights[l][j, k]  # we will corrupt it while adding-subtracting eps
 
-        eps = 0.0001
+        eps = 0.000001
         self.weights[l][j, k] += eps
         C_right = self.cost(X, Y)
         self.weights[l][j, k] -= 2*eps
@@ -375,7 +375,7 @@ def msi(y, output_activations):
     # calculate msi for each sample, msi_per_sample shape is (M,)
     msi_per_sample = np.linalg.norm(y - output_activations, axis=0)
     # now sum them up and divide on /2M
-    res = np.sum(msi_per_sample) / (2 * y.shape[1])
+    res = np.sum(msi_per_sample) / (1 * y.shape[1])
     print "msi per sample is {0}".format(msi_per_sample)
     print "res is {0}".format(res)
     return res
