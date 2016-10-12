@@ -140,7 +140,7 @@ class Network(object):
                 # print "Starting minibatch {0}-{1}".format(mini_batch_index, mini_batch_index + mini_batch_size)
                 mini_batch_train_data = train_data[mini_batch_index:mini_batch_index + mini_batch_size]
                 mini_batch_train_target = train_target[mini_batch_index:mini_batch_index + mini_batch_size]
-                dLdW, dLdB = self.update_mini_batch_one_by_one(mini_batch_train_data, mini_batch_train_target, eta)
+                dLdW, dLdB = self.update_mini_batch(mini_batch_train_data, mini_batch_train_target, eta)
 
             print "Epoch {0} complete".format(ep_num)
 
@@ -175,6 +175,7 @@ class Network(object):
         for i_sample in xrange(train_data.shape[0]):
             x_col = train_data_transposed[:, i_sample].reshape((self.N, 1))
             y_col = train_target_transposed[:, i_sample].reshape((self.P, 1))
+            print "calling backprop from update_minibatch_one_by_one"
             nabla_b_for_i_sample, nabla_w_for_i_sample = self.backprop(x_col, y_col)
             nabla_b = map(lambda nb, dnb: nb + dnb, nabla_b, nabla_b_for_i_sample)
             nabla_w = map(lambda nw, dnw: nw + dnw, nabla_w, nabla_w_for_i_sample)
@@ -189,10 +190,10 @@ class Network(object):
                                                         train_target_transposed,
                                                         layer_i, nabla_w[layer_i])
 
-        self.weights = [layer_weights - (eta / train_data.shape[0]) * nw
-                        for layer_weights, nw in zip(self.weights, nabla_w)]
-        self.biases = [layer_biases - (eta / train_data.shape[0]) * nb
-                       for layer_biases, nb in zip(self.biases, nabla_b)]
+        # self.weights = [layer_weights - (eta / train_data.shape[0]) * nw
+                        # for layer_weights, nw in zip(self.weights, nabla_w)]
+        # self.biases = [layer_biases - (eta / train_data.shape[0]) * nb
+        #                for layer_biases, nb in zip(self.biases, nabla_b)]
         return nabla_w, nabla_b
 
     def update_mini_batch(self, train_data, train_target, eta):
@@ -219,7 +220,23 @@ class Network(object):
         train_data_transposed = np.transpose(train_data)
         train_target_transposed = np.transpose(train_target)
 
+        # print "calling backprop from matrix minibatch update"
         dLdB, dLdW = self.backprop(train_data_transposed, train_target_transposed)
+
+        # WARNING: For performance reasons, I decided not to make copies of self.weights while calculating
+        # derivatives manually, I modify them in place and the restore old value.
+        # Therefore, in case of mistakes in gradient checking this may lead to very nasty bugs.
+        # Be careful and disable it if something goes wrong.
+        if self.gradient_check:
+            for layer_i in xrange(len(self.sizes) - 1):
+                self.grad_check_per_layer_per_minibatch(train_data_transposed,
+                                                        train_target_transposed,
+                                                        layer_i, dLdW[layer_i])
+
+        # if True:
+        #     dLdW_one_by_one, dLdB_one_by_one = self.update_mini_batch_one_by_one(train_data, train_target, eta)
+        #     print "grad check against one by one: <one by one | matrix>: " + str(dLdW_one_by_one[1][0, 0]) + " " \
+        #           + str(dLdW[1][0, 0])
 
         self.biases = [layer_biases - (eta / train_data.shape[0]) * nb
                        for layer_biases, nb in zip(self.biases, dLdB)]
@@ -227,42 +244,42 @@ class Network(object):
                         for layer_weights, nw in zip(self.weights, dLdW)]
         return dLdW, dLdB
 
-    def backprop_single_sample(self, x, y):
-        """Calculate weight and bias derivatives for each neuron in each layer using single sample x with answer y via
-        backpropagation.
-
-        Args:
-            x: Single sample to train on, numpy ndarray. x has shape (N, 1) where N is the number of features.
-            y: Answer to x. y has shape (P, 1) where P is the number of neurons in the last layer.
-
-        Returns:
-            A tuple (dLdB, dLdW) where dlDb contains derivatives of L (loss or cost function) along each bias and
-            dLdW contains derivatives of L along each weight. Their shape is exactly the same as self.biases and
-            self.weights -- list of numpy column vectors and list of numpy matrices.
-        """
-        assert(x.shape == (self.N, 1))
-        assert(y.shape == (self.P, 1))
-        dLdB = [np.zeros(b.shape) for b in self.biases]
-        dLdW = [np.zeros(w.shape) for w in self.weights]
-
-        # forward
-        output, activations, zs = self.feedforward(x)
-
-        # backward
-        assert(zs[-1].shape == y.shape)
-        # delta is the derivative of L along z
-        delta = self.cost_derivative(output, y) * self.activation_func_derivative(zs[-1])
-        dLdB[-1] = delta
-        dLdW[-1] = np.dot(delta, activations[-2].transpose())
-
-        for l in xrange(2, self.num_layers):
-            z = zs[-l]
-            sp = self.activation_func_derivative(z)
-            delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
-            dLdB[-l] = delta
-            dLdW[-l] = np.dot(delta, activations[-l-1].transpose())
-
-        return dLdB, dLdW
+    # def backprop_single_sample(self, x, y):
+    #     """Calculate weight and bias derivatives for each neuron in each layer using single sample x with answer y via
+    #     backpropagation.
+    #
+    #     Args:
+    #         x: Single sample to train on, numpy ndarray. x has shape (N, 1) where N is the number of features.
+    #         y: Answer to x. y has shape (P, 1) where P is the number of neurons in the last layer.
+    #
+    #     Returns:
+    #         A tuple (dLdB, dLdW) where dlDb contains derivatives of L (loss or cost function) along each bias and
+    #         dLdW contains derivatives of L along each weight. Their shape is exactly the same as self.biases and
+    #         self.weights -- list of numpy column vectors and list of numpy matrices.
+    #     """
+    #     assert(x.shape == (self.N, 1))
+    #     assert(y.shape == (self.P, 1))
+    #     dLdB = [np.zeros(b.shape) for b in self.biases]
+    #     dLdW = [np.zeros(w.shape) for w in self.weights]
+    #
+    #     # forward
+    #     output, activations, zs = self.feedforward(x)
+    #
+    #     # backward
+    #     assert(zs[-1].shape == y.shape)
+    #     # delta is the derivative of L along z
+    #     delta = self.cost_derivative(output, y) * self.activation_func_derivative(zs[-1])
+    #     dLdB[-1] = delta
+    #     dLdW[-1] = np.dot(delta, activations[-2].transpose())
+    #
+    #     for l in xrange(2, self.num_layers):
+    #         z = zs[-l]
+    #         sp = self.activation_func_derivative(z)
+    #         delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
+    #         dLdB[-l] = delta
+    #         dLdW[-l] = np.dot(delta, activations[-l-1].transpose())
+    #
+    #     return dLdB, dLdW
 
     def backprop(self, X, Y):
         """Calculate weight and bias derivatives for each neuron in each layer using (summing them up for each sample)
@@ -292,34 +309,36 @@ class Network(object):
         # delta is the derivative of L along z. delta's shape is (J, M), where J is number of neurons in a layer; J=P
         # at the moment
         delta = self.cost_derivative(outputs, Y) * self.activation_func_derivative(zs[-1])
-        dLdB[-1] = delta
+        # collapse columns, summing derivatives for each sample 
+        dLdB[-1] = np.sum(delta, 1).reshape((delta.shape[0], 1))
         dLdW[-1] = np.dot(delta, activations[-2].transpose())
 
         for l in xrange(2, self.num_layers):
             z = zs[-l]
             sp = self.activation_func_derivative(z)
             delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
-            dLdB[-l] = delta
+            dLdB[-l] = np.sum(delta, 1).reshape((delta.shape[0], 1))
             dLdW[-l] = np.dot(delta, activations[-l-1].transpose())
 
         return dLdB, dLdW
 
     def grad_check_per_layer_per_minibatch(self, X, Y, layer_i, layer_dLdW_by_backprop):
-        # max_measure = 0.0
-        # for k in xrange(self.sizes[layer_i]):  # previous layer
-        #     for j in xrange(self.sizes[layer_i + 1]):  # next layer
-        #         dLdW_l_j_k_manually = self.calc_dLdW_manually(X, Y, layer_i, k, j)
-        #         if layer_dLdW_by_backprop[j, k] == 0.0 and dLdW_l_j_k_manually == 0.0:  # to avoid division by zero
-        #             continue
-        #         measure = abs(layer_dLdW_by_backprop[j, k] - dLdW_l_j_k_manually) /\
-        #                   abs(layer_dLdW_by_backprop[j, k] + dLdW_l_j_k_manually)
-        #         if measure >= max_measure:
-        #             max_measure = measure
-        # print "grad check for layer {0}: max measure is {1}".format(layer_i, max_measure)
-        if layer_i == 0:
-            print "grad_check, layer {0} <backprop | manual>: {1} | {2}".format(layer_i,
-                                                                            layer_dLdW_by_backprop[2, 1],
-                                                                            self.calc_dLdW_manually(X, Y, layer_i, 1, 2))
+        max_measure = 0.0
+        for k in xrange(self.sizes[layer_i]):  # previous layer
+            for j in xrange(self.sizes[layer_i + 1]):  # next layer
+                dLdW_l_j_k_manually = self.calc_dLdW_manually(X, Y, layer_i, k, j)
+                if layer_dLdW_by_backprop[j, k] == 0.0 and dLdW_l_j_k_manually == 0.0:  # to avoid division by zero
+                    continue
+                measure = abs(layer_dLdW_by_backprop[j, k] - dLdW_l_j_k_manually) /\
+                          abs(layer_dLdW_by_backprop[j, k] + dLdW_l_j_k_manually)
+                if measure >= max_measure:
+                    max_measure = measure
+        print "grad check for layer {0}: max measure is {1}".format(layer_i, max_measure)
+        # if layer_i == 0:
+        #     print "grad_check, layer {0} <backprop | manual>: {1} | {2}".\
+        #         format(layer_i,
+        #                layer_dLdW_by_backprop[2, 1],
+        #                self.calc_dLdW_manually(X, Y, layer_i, 1, 2))
 
     def calc_dLdW_manually(self, X, Y, l, k, j):
         """This function is similar to self.backprop in the sense that it calculates derivatives of L along weights.
@@ -376,8 +395,6 @@ def msi(y, output_activations):
     msi_per_sample = np.square(np.linalg.norm(y - output_activations, axis=0))
     # now sum them up and divide on /2M
     res = np.sum(msi_per_sample) / (1 * y.shape[1])
-    print "msi per sample is {0}".format(msi_per_sample)
-    print "res is {0}".format(res)
     return res
 
     # diff = y - output_activations
