@@ -15,7 +15,7 @@ np.seterr(all='raise')
 
 class Network(object):
     # sizes is a list of layer's sizes
-    def __init__(self, sizes, activation, cost, gradient_check):
+    def __init__(self, sizes, activation, cost, gradient_check, gradient_check_eps):
         assert sizes is not None
         self.num_layers = len(sizes)
         assert(self.num_layers >= 2)
@@ -40,6 +40,10 @@ class Network(object):
             pass
 
         self.gradient_check = gradient_check
+        self.gradient_check_eps = 0.0001
+        if gradient_check_eps is not None:
+            self.gradient_check_eps = gradient_check_eps
+
 
     def init_weights_and_biases(self):
         # L-1 column vectors containing biases, length of each equals to number of neurons:
@@ -232,7 +236,7 @@ class Network(object):
         max_measure = 0.0
         for k in xrange(self.sizes[layer_i]):  # previous layer
             for j in xrange(self.sizes[layer_i + 1]):  # next layer
-                dLdW_l_j_k_manually = self.calc_dLdW_manually(X, Y, layer_i, k, j)
+                dLdW_l_j_k_manually = self.calc_dLdW_manually_one_by_one(X, Y, layer_i, k, j)
                 if layer_dLdW_by_backprop[j, k] == 0.0 and dLdW_l_j_k_manually == 0.0:  # to avoid division by zero
                     continue
                 measure = abs(layer_dLdW_by_backprop[j, k] - dLdW_l_j_k_manually) /\
@@ -247,12 +251,26 @@ class Network(object):
         #                layer_dLdW_by_backprop[2, 1],
         #                self.calc_dLdW_manually(X, Y, layer_i, 1, 2))
 
+    def calc_dLdW_manually_one_by_one(self, X, Y, l, k, j):
+        """See Network.calc_dLdW_manually description why this method is necessary.
+        """
+        res = 0.0
+        for i in xrange(X.shape[1]):
+            res += self.calc_dLdW_manually(X[:, i].reshape((X.shape[0], 1)),
+                                           Y[:, i].reshape((Y.shape[0], 1)),
+                                           l, k, j)
+        return res
+
     def calc_dLdW_manually(self, X, Y, l, k, j):
         """This function is similar to self.backprop in the sense that it calculates derivatives of L along weights.
         However it does it manually, using the definition of a derivative, and since vectorization here is not an
         option (we can't calculate more that one derivative per two passes), it does it in scalar way: it returns dL
         for a very specific w[l][j, k]. However, vectorization along multiple samples still work: we use here not just
         one sample x but a bunch of them and sum up derivatives for each of them to get the result.
+
+        Well, I have changed my mind. In principle, vectorization along multiple samples work, but we can't use it
+        to check backprop results, because in backprop we calculate each derivative independently and then sum them up,
+        while here we compute cost of all samples at once and get different value eventually.
 
         Args:
             X: Samples to train on, numpy ndarray. X has shape (self.N, M) where M is the number of samples.
@@ -267,15 +285,14 @@ class Network(object):
         """
         saved_weight = self.weights[l][j, k]  # we will corrupt it while adding-subtracting eps
 
-        eps = 0.0001
-        self.weights[l][j, k] += eps
+        self.weights[l][j, k] += self.gradient_check_eps
         C_right = self.cost(X, Y)
-        self.weights[l][j, k] -= 1*eps
+        self.weights[l][j, k] -= 1*self.gradient_check_eps
         C_left = self.cost(X, Y)
 
         self.weights[l][j, k] = saved_weight  # restore corrupted weights
 
-        return (C_right - C_left) / (2*eps)
+        return (C_right - C_left) / (2*self.gradient_check_eps)
 
     def cost(self, X, Y):
         outputs = self.feedforward(X)[0]
