@@ -274,7 +274,7 @@ class Network(object):
 
         Args:
             X: Samples to train on, numpy ndarray. X has shape (self.N, M) where M is the number of samples.
-            Y: Answers to X. Y has shape (P, M) where P is the number of neurons in the last layer.
+            Y: Answers to X. Y has shape (self.P, M) where P is the number of neurons in the last layer.
             l: index of layer
             k: index of neuron in layer l
             j: index of nuron in layer l+1
@@ -287,7 +287,7 @@ class Network(object):
 
         self.weights[l][j, k] += self.gradient_check_eps
         C_right = self.cost(X, Y)
-        self.weights[l][j, k] -= 1*self.gradient_check_eps
+        self.weights[l][j, k] -= 2*self.gradient_check_eps
         C_left = self.cost(X, Y)
 
         self.weights[l][j, k] = saved_weight  # restore corrupted weights
@@ -295,16 +295,23 @@ class Network(object):
         return (C_right - C_left) / (2*self.gradient_check_eps)
 
     def cost(self, X, Y):
+        """Compute cost for samples X with answers Y.
+
+        Args:
+            X: Samples to train on, numpy ndarray. X has shape (self.N, M) where M is the number of samples.
+            Y: Answers to X. Y has shape (self.P, M) where P is the number of neurons in the last layer.
+        """
         outputs = self.feedforward(X)[0]
         return self.cost_func(Y, outputs)
 
 
-# cost functions
-def msi(y, output_activations):
-    """Calculate MSI.
+# cost functions with derivatives
+def msi(Y, output_activations):
+    """Calculate MSI. Exact formula is
+    C(X, W, B) = \frac{1}{2n}\sum_{x}\sum_{j = 1}^{P}(y(x)_j - a(x, W, B)_j)^2
 
     Args:
-        y: correct answers. ndarray of shape (P, M) where M is the number of samples
+        Y: correct answers. ndarray of shape (P, M) where M is the number of samples
            and P is the number of neurons in the last layer. This is exactly the same format as
            Network.feedforward()[0]
         output_activations: network's answers. ndarray of shape (P, M) where M is the number of samples
@@ -314,11 +321,11 @@ def msi(y, output_activations):
     Returns:
         MSI cost, scalar value
     """
-    assert (y.shape == output_activations.shape)
+    assert (Y.shape == output_activations.shape)
     # calculate msi for each sample, msi_per_sample shape is (M,)
-    msi_per_sample = np.square(np.linalg.norm(y - output_activations, axis=0))
+    msi_per_sample = np.sum(np.square(Y - output_activations), axis=0)
     # now sum them up and divide on /2M
-    res = np.sum(msi_per_sample) / (1 * y.shape[1])
+    res = np.sum(msi_per_sample) / (2 * Y.shape[1])
     return res
 
     # diff = y - output_activations
@@ -326,8 +333,33 @@ def msi(y, output_activations):
 
 
 # returns a column vector -- derivative of C along all final activations
-def msi_derivative(output_activations, y):
-    return output_activations - y
+def msi_derivative(output_activations, Y):
+    """Calculate derivative of MSI cost along all final activations.
+    If we just take derivative of msi funciton desribed above, we will get
+    \frac{\partial C(X, W, B)}{\partial a_j} = \frac{1}{n}\sum_x(a_j(x, W, B) - y(x)_j)
+    However, it is not we need here. We need to compute derivatives of cost depending on single sample x, so we need
+    msi\_derivative[j, i] = \frac{\partial C(X_i, W, B)}{\partial a_j} = a_j(X_i, W, B) - y(X_i)_j
+    for each j in 1..P and each i in 1..M
+
+    Args:
+        Y: correct answers. ndarray of shape (P, M) where M is the number of samples
+           and P is the number of neurons in the last layer. This is exactly the same format as
+           Network.feedforward()[0]
+        output_activations: network's answers. ndarray of shape (P, M) where M is the number of samples
+            and P is the number of neurons in the last layer. This is exactly the same format as
+           Network.feedforward()[0]
+
+    Returns:
+        MSI derivative along all final activations, computed on each sample independently, ndarray of shape (P, M).
+
+    P.S. If we took classical vector length (euclidean norm) in the definition of MSI above instead of just sum over
+    squares, the code for M=1 would look like this:
+        norm = np.sqrt(np.sum(np.square(output_activations - Y)))
+        norm_deriv = 1.0 / (2 * root)
+        return norm_deriv * (output_activations - Y)
+    It works only for single sample (M=1), for matrices it would be a bit different.
+    """
+    return output_activations - Y
 
 
 # activation functions

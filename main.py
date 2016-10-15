@@ -29,9 +29,9 @@ if __name__ == "__main__":
     parser.add_argument("-gch_eps", "--gradcheck_eps", help="increment to compute derivatives manually", type=float)
 
 
-    parser.add_argument("-ep", "--epochs", help="Number of epochs", type=int, default=1)
-    parser.add_argument("-mbs", "--mini_batch_size", help="Mini batch size", type=int, default=1)
-    parser.add_argument("-lr", "--learning_rate", help="Learning rate", type=float, default=1.0)
+    parser.add_argument("-ep", "--epochs", help="Number of epochs, by default 1", type=int, default=1)
+    parser.add_argument("-mbs", "--mini_batch_size", help="Mini batch size, by default 1", type=int, default=1)
+    parser.add_argument("-lr", "--learning_rate", help="Learning rate, by default 1.0", type=float, default=1.0)
     args = parser.parse_args()
     network = Network(args.sizes, activation=args.activation, cost=args.cost, gradient_check=args.gradcheck,
                       gradient_check_eps=args.gradcheck_eps)
@@ -47,7 +47,11 @@ if __name__ == "__main__":
     # evaluate_mnist()
 
 # TODO list:
+# add comment to grad check with formula description
+# add exact msi formula and it's derivative
 # add cross entropy
+# softmax
+# initial wieghts
 # add regularization
 # compare comparison? how? findings?
 # mod grad / iteration number
