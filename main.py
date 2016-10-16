@@ -22,12 +22,11 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--sizes", nargs='+', help="Layer sizes", type=int)
     parser.add_argument("-act", "--activation", help="Activation function, <identity|relu|sigmoid>, by default"
                                                      " sigmoid")
-    parser.add_argument("-cost", help="Cost function, <mse|ce>, by default mse")
+    parser.add_argument("-c", "--cost", help="Cost function, <mse|ce>, by default mse")
 
     parser.add_argument("-gch", "--gradcheck", help="Log manually computed derivatives to compare them with calculated"
                                                     "via backprop", action="store_true")
     parser.add_argument("-gch_eps", "--gradcheck_eps", help="increment to compute derivatives manually", type=float)
-
 
     parser.add_argument("-ep", "--epochs", help="Number of epochs, by default 1", type=int, default=1)
     parser.add_argument("-mbs", "--mini_batch_size", help="Mini batch size, by default 1", type=int, default=1)
@@ -47,8 +46,7 @@ if __name__ == "__main__":
     # evaluate_mnist()
 
 # TODO list:
-# add comment to grad check with formula description
-# add exact msi formula and it's derivative
+# grad check description
 # add cross entropy
 # softmax
 # initial wieghts
@@ -58,3 +56,7 @@ if __name__ == "__main__":
 # different learning rate?
 # debug relu?
 # move task evaluation outside?
+
+# Questions:
+# summing up derivatives per each sample?
+# just derive MSE analytically?

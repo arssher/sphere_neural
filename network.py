@@ -34,10 +34,12 @@ class Network(object):
         elif activation == "identity":
             self.activation_func = identity_activation
             self.activation_func_derivative = identity_activation_derivative
+
         self.cost_func = msi
         self.cost_derivative = msi_derivative
         if cost == "crossentropy":
-            pass
+            self.cost_func = cross_entropy
+            self.cost_derivative = cross_entropy_derivative
 
         self.gradient_check = gradient_check
         self.gradient_check_eps = 0.0001
@@ -100,13 +102,16 @@ class Network(object):
 
     # evaluate test data and print percent of correct answers
     def evaluate_mnist(self, test_data, test_target):
+        tests_num = len(test_data)
         correct_answers = 0
         for test_x, test_y in zip(test_data, test_target):
             answer = np.argmax(self.feedforward(test_x)[0])
             # print "given answer is {0}, right answer is {1}".format(answer, test_y)
             if answer == test_y:
                 correct_answers += 1
-        print "Evaluation finished: {0} / {1} tests correct".format(correct_answers, len(test_data))
+        print "Evaluation finished: {0} / {1} tests correct ({2}%)".format(correct_answers, tests_num,
+                                                                           "{0:0.2f}".format(
+                                                                               100.0 * correct_answers / tests_num))
         return correct_answers
 
     def evaluate_xor(self, test_data, test_target):
@@ -224,8 +229,7 @@ class Network(object):
 
         for l in xrange(2, self.num_layers):
             z = zs[-l]
-            sp = self.activation_func_derivative(z)
-            delta = np.dot(self.weights[-l+1].transpose(), delta) * sp
+            delta = np.dot(self.weights[-l+1].transpose(), delta) * self.activation_func_derivative(z)
             dLdB[-l] = np.sum(delta, 1).reshape((delta.shape[0], 1))
             dLdW[-l] = np.dot(delta, activations[-l-1].transpose())
 
@@ -325,17 +329,12 @@ def msi(Y, output_activations):
     # calculate msi for each sample, msi_per_sample shape is (M,)
     msi_per_sample = np.sum(np.square(Y - output_activations), axis=0)
     # now sum them up and divide on /2M
-    res = np.sum(msi_per_sample) / (2 * Y.shape[1])
-    return res
-
-    # diff = y - output_activations
-    # return np.dot(np.transpose(diff), diff)[0][0]
+    return np.sum(msi_per_sample) / (2 * Y.shape[1])
 
 
-# returns a column vector -- derivative of C along all final activations
 def msi_derivative(output_activations, Y):
     """Calculate derivative of MSI cost along all final activations.
-    If we just take derivative of msi funciton desribed above, we will get
+    If we just take derivative of msi function described above, we will get
     \frac{\partial C(X, W, B)}{\partial a_j} = \frac{1}{n}\sum_x(a_j(x, W, B) - y(x)_j)
     However, it is not we need here. We need to compute derivatives of cost depending on single sample x, so we need
     msi\_derivative[j, i] = \frac{\partial C(X_i, W, B)}{\partial a_j} = a_j(X_i, W, B) - y(X_i)_j
@@ -359,7 +358,49 @@ def msi_derivative(output_activations, Y):
         return norm_deriv * (output_activations - Y)
     It works only for single sample (M=1), for matrices it would be a bit different.
     """
+    assert (Y.shape == output_activations.shape)
     return output_activations - Y
+
+
+def cross_entropy(Y, output_activations):
+    """Calculate cross-entropy cost function. Exact formula is
+    C(X, W, B) = -\frac{1}{n}\sum_{x}\sum_{j = 1}^{P}(y(x)_j * ln(a(x, W, B)_j )+ (1 - y(x)_j) * ln(1 - a(x, W, B)_j))
+
+    Args:
+        Y: correct answers. ndarray of shape (P, M) where M is the number of samples
+           and P is the number of neurons in the last layer. This is exactly the same format as
+           Network.feedforward()[0]
+        output_activations: network's answers. ndarray of shape (P, M) where M is the number of samples
+            and P is the number of neurons in the last layer. This is exactly the same format as
+           Network.feedforward()[0]
+
+    Returns:
+        Cross-entropy, scalar value
+    """
+    assert (Y.shape == output_activations.shape)
+    # calculate ce for each sample, ce_per_sample shape is (M,)
+    ce_per_sample = np.sum(np.nan_to_num(Y * np.log(output_activations) + (1 - Y) * np.log(output_activations)), axis=0)
+    return - np.sum(ce_per_sample) / (Y.shape[1])
+
+
+def cross_entropy_derivative(output_activations, Y):
+    """Calculate derivative of CE cost along all final activations.
+    Again, we we need to compute derivatives of cost per each sample individually, so for each column pair in
+    zip(output_activations, Y) we use the following formula:
+
+    Args:
+        Y: correct answers. ndarray of shape (P, M) where M is the number of samples
+           and P is the number of neurons in the last layer. This is exactly the same format as
+           Network.feedforward()[0]
+        output_activations: network's answers. ndarray of shape (P, M) where M is the number of samples
+            and P is the number of neurons in the last layer. This is exactly the same format as
+           Network.feedforward()[0]
+
+    Returns:
+        MSI derivative along all final activations, computed on each sample independently, ndarray of shape (P, M).
+    """
+    assert (Y.shape == output_activations.shape)
+    return (output_activations - Y) / (output_activations - np.square(output_activations))
 
 
 # activation functions
@@ -380,11 +421,11 @@ def relu_derivative(z):
 
 
 def sigmoid(z):
-    return 1.0/(1.0 + np.exp(-z))
+    return 1.0 / (1.0 + np.exp(-z))
 
 
 def sigmoid_derivative(z):
-    return sigmoid(z)*(1-sigmoid(z))
+    return sigmoid(z) * (1 - sigmoid(z))
 
 
 def sigmoid_hack(z):
