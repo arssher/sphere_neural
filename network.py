@@ -222,6 +222,8 @@ class Network(object):
         assert(zs[-1].shape == Y.shape)
         # delta is the derivative of L along z. delta's shape is (J, M), where J is number of neurons in a layer; J=P
         # at the moment
+        # in case of cross_entropy-sigmoid pair the term 'activation*(1 - activation)' will be canceled here,
+        # so it is not very effective, but, on the other hand, more uniform
         delta = self.cost_derivative(outputs, Y) * self.activation_func_derivative(zs[-1])
         # collapse columns, summing derivatives for each sample
         dLdB[-1] = np.sum(delta, 1).reshape((delta.shape[0], 1))
@@ -235,8 +237,23 @@ class Network(object):
 
         return dLdB, dLdW
 
-    # todo: add description
     def grad_check_per_layer_per_minibatch(self, X, Y, layer_i, layer_dLdW_by_backprop):
+        """Method for debugging weight gradient computed via backprop. For given layer number and
+         matrix of weight derivatives for this layer it computes the same derivatives manually and aggregates them
+         to make the comparison: as a measure we take here
+         max{ |dLdW_by_backprop[j, k] - dLdW_manually[j, k]| / |dLdW_by_backprop[j, k] + dLdW_manually[j, k]|
+         where max is taken over all layer_i's weights.
+
+         Args:
+            X: Samples to train on, numpy ndarray. X has shape (self.N, M) where M is the number of samples
+            Y: Answers to X. Y has shape (P, M) where P is the number of neurons in the last layer.
+            layer_i: index of layer to check weight gradient
+            layer_dLdW_by_backprop: weights gradient computed by backprop, shape is [J, K] where J is size of layer
+            layer_i and K is the size of layer layer_i + 1.
+
+        Returns:
+            Nothing, gradient check is printed to stdout.
+         """
         max_measure = 0.0
         for k in xrange(self.sizes[layer_i]):  # previous layer
             for j in xrange(self.sizes[layer_i + 1]):  # next layer

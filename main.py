@@ -46,8 +46,6 @@ if __name__ == "__main__":
     # evaluate_mnist()
 
 # TODO list:
-# grad check description
-# add cross entropy
 # softmax
 # initial wieghts
 # add regularization
